@@ -9,8 +9,11 @@ import axios from "axios"; // For making HTTP requests to Open Banking API
 
 // Load environment variables
 // Fix the path resolution before config is called
-const envPath = path.resolve("login/.env");
+const envPath = path.resolve("./login/.env");
 dotenv.config({ path: envPath });
+
+console.log("Loaded Secret Key:", process.env.SECRET_KEY);
+
 
 const USERS_FILE = "./mock.json";
 
