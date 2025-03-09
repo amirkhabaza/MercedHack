@@ -1,22 +1,22 @@
+
 // App state
 let wallets = JSON.parse(localStorage.getItem('wallets')) || [];
 let currentWalletId = localStorage.getItem('currentWalletId') || null;
 let watchlist = JSON.parse(localStorage.getItem('watchlist')) || [];
-let apiKey = 'NIGF76UL70EX947G'; // Replace with your Alpha Vantage API key
+let apiKey = ''; 
 
-// Predefined list of stocks with their beta values
-const stockDatabase = [
-  { symbol: 'AAPL', name: 'Apple Inc.', beta: 1.2, category: 'Technology' },
-  { symbol: 'MSFT', name: 'Microsoft Corporation', beta: 0.9, category: 'Technology' },
-  { symbol: 'GOOGL', name: 'Alphabet Inc.', beta: 1.1, category: 'Technology' },
-  { symbol: 'AMZN', name: 'Amazon.com Inc.', beta: 1.3, category: 'Consumer Discretionary' },
-  { symbol: 'TSLA', name: 'Tesla Inc.', beta: 2.0, category: 'Automotive' },
-  { symbol: 'JNJ', name: 'Johnson & Johnson', beta: 0.7, category: 'Healthcare' },
-  { symbol: 'V', name: 'Visa Inc.', beta: 0.9, category: 'Financial Services' },
-  { symbol: 'WMT', name: 'Walmart Inc.', beta: 0.5, category: 'Consumer Staples' },
-  { symbol: 'PG', name: 'Procter & Gamble', beta: 0.4, category: 'Consumer Staples' },
-  { symbol: 'XOM', name: 'Exxon Mobil Corporation', beta: 1.1, category: 'Energy' },
-];
+async function fetchApiKey() {
+    try {
+        const response = await fetch("/api/config");
+        const data = await response.json();
+        apiKey = data.apiKey;
+        console.log("API Key Loaded:", apiKey); // Debugging, remove in production
+    } catch (error) {
+        console.error("Error fetching API key:", error);
+    }
+}
+
+fetchApiKey();
 
 // DOM Elements
 const tabDashboard = document.getElementById('tab-dashboard');
@@ -58,7 +58,12 @@ const recommendedStockSymbol = document.getElementById('recommended-stock-symbol
 const recommendedCategory = document.getElementById('recommended-category');
 const recommendedPrice = document.getElementById('recommended-price');
 const recommendedRiskLevel = document.getElementById('recommended-risk-level');
+const betaValue = document.getElementById('beta-value');
+const volatilityValue = document.getElementById('volatility-value');
+const peValue = document.getElementById('pe-value');
+const dividendValue = document.getElementById('dividend-value');
 const addRecommendedToWatchlist = document.getElementById('add-recommended-to-watchlist');
+const popularStocksGrid = document.getElementById('popular-stocks-grid');
 
 // Helper Functions
 function saveWallets() {
@@ -105,6 +110,7 @@ function showTab(tabName) {
     tabDashboard.classList.add('active');
     updateActivitySection();
     updateWatchlist();
+    updatePopularStocksByRisk();
   } else if (tabName === 'wallets') {
     walletsPage.classList.remove('hidden');
     tabWallets.classList.add('active');
@@ -395,74 +401,418 @@ function updateWatchlist() {
   });
 }
 
-// Function to calculate risk score based on beta
-function calculateRiskScore(beta) {
-  if (beta < 0.8) return Math.floor(Math.random() * 3) + 1; // Low risk
-  if (beta <= 1.2) return Math.floor(Math.random() * 4) + 4; // Medium risk
-  return Math.floor(Math.random() * 3) + 8; // High risk
-}
-
-// Function to find matching stocks
-function findMatchingStocks(riskTolerance) {
-  // Calculate risk scores for all stocks
-  const stocksWithRisk = stockDatabase.map(stock => ({
-    ...stock,
-    riskScore: calculateRiskScore(stock.beta),
-  }));
-
-  // Filter stocks with a risk score within ±2 of the user's risk tolerance
-  return stocksWithRisk.filter(stock => Math.abs(stock.riskScore - riskTolerance) <= 2);
-}
-
-// Function to display the top recommendation
-function displayRecommendation(stock) {
-  recommendedStockName.textContent = stock.name;
-  recommendedStockSymbol.textContent = stock.symbol;
-  recommendedCategory.textContent = stock.category;
-  recommendedPrice.textContent = 'Loading...'; // Fetch real-time price if needed
-  recommendedRiskLevel.textContent = stock.riskScore <= 3 ? 'Low' : stock.riskScore <= 7 ? 'Medium' : 'High';
-  recommendationResult.classList.remove('hidden');
-}
-
-// Event listener for "Find Matching Stocks" button
-findMatchesBtn.addEventListener('click', () => {
-  const riskTolerance = parseInt(riskToleranceSlider.value);
-  const matches = findMatchingStocks(riskTolerance);
-  if (matches.length > 0) {
-    displayRecommendation(matches[0]);
-  } else {
-    alert('No matching stocks found for your risk profile.');
+// Function to refresh watchlist data
+async function refreshWatchlist() {
+  if (watchlist.length === 0) return;
+  
+  // Limit API calls by updating one stock at a time
+  const stockToUpdate = watchlist[0];
+  watchlist = watchlist.slice(1).concat([stockToUpdate]);
+  
+  try {
+    const response = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${stockToUpdate.symbol}&apikey=${apiKey}`);
+    const data = await response.json();
+    
+    if (data['Global Quote'] && data['Global Quote']['05. price']) {
+      const quote = data['Global Quote'];
+      const price = parseFloat(quote['05. price']).toFixed(2);
+      const change = parseFloat(quote['09. change']).toFixed(2);
+      const changePercent = quote['10. change percent'].replace('%', '');
+      const changeText = `${change > 0 ? '+' : ''}${change} (${changePercent}%)`;
+      
+      // Update the stock in the watchlist
+      const index = watchlist.findIndex(stock => stock.symbol === stockToUpdate.symbol);
+      if (index !== -1) {
+        watchlist[index].price = price;
+        watchlist[index].change = changeText;
+        watchlist[index].changeValue = change;
+        saveWatchlist();
+        updateWatchlist();
+      }
+    }
+  } catch (error) {
+    console.error('Error refreshing watchlist:', error);
   }
-});
-
-// Add recommended stock to watchlist
-addRecommendedToWatchlist.addEventListener('click', () => {
-  const symbol = recommendedStockSymbol.textContent;
-  const price = recommendedPrice.textContent;
-  const change = 'N/A'; // You can fetch real-time data if needed
-  const changeValue = 0; // You can fetch real-time data if needed
-
-  if (!watchlist.some(stock => stock.symbol === symbol)) {
-    watchlist.push({
-      symbol,
-      price,
-      change,
-      changeValue,
-      addedAt: Date.now()
-    });
-    saveWatchlist();
-    updateWatchlist();
-    alert(`${symbol} added to watchlist!`);
-  } else {
-    alert(`${symbol} is already in your watchlist.`);
-  }
-});
-
+}
+// Set up a periodic refresh
+setInterval(refreshWatchlist, 60000); // Update every minute
 // Initialize
-function init() {
-  showTab(currentWalletId ? 'dashboard' : 'wallets');
-  updateWalletsPage();
-  updateWatchlist();
+
+// List of stock symbols to fetch
+const stockSymbols = [
+'AAPL', 'VZ', 'NTDOY', 'DIS', 'BA', 'MA', 'GE', 'MSFT', 
+'INTC', 'NFLX', 'SIRI', 'X', 'AMZN', 'FB', 'T', 'CCEP', 
+'GOOG', 'TSLA', 'PYPL', 'KO'
+];
+
+// Dynamic stock database that will be populated with real data
+let stockDatabase = [];
+
+// Function to fetch stock data and populate the database
+async function populateStockDatabase() {
+const fetchedStocks = [];
+
+// Show loading state
+const loadingEl = document.createElement('div');
+loadingEl.id = 'database-loading';
+loadingEl.innerHTML = '<p>Loading stock data... This may take a moment.</p>';
+document.querySelector('.investment-dashboard').prepend(loadingEl);
+
+// Process a limited number of stocks at once to avoid API limits
+const symbolsToProcess = stockSymbols.slice(0, 5); // Start with 5 stocks
+
+for (const symbol of symbolsToProcess) {
+try {
+  // Fetch both quote and overview data
+  const [quoteData, overviewData] = await Promise.all([
+    fetchStockQuote(symbol),
+    fetchStockOverview(symbol)
+  ]);
+  
+  if (quoteData && overviewData) {
+    // Calculate a risk score based on beta and other factors
+    let riskScore = 5; // Default moderate risk
+    
+    if (overviewData.Beta) {
+      const beta = parseFloat(overviewData.Beta);
+      // Beta < 0.8 = lower risk, Beta > 1.2 = higher risk
+      if (beta < 0.8) riskScore = Math.floor(3 * beta + 1);
+      else if (beta > 1.2) riskScore = Math.min(10, Math.floor(5 * beta - 1));
+      else riskScore = 5; // Moderate risk for beta between 0.8 and 1.2
+    }
+    
+    // Add volatility indicator (using beta as proxy if not available)
+    const volatility = overviewData.Beta ? parseFloat(overviewData.Beta) * 10 : 15;
+    
+    fetchedStocks.push({
+      name: overviewData.Name || symbol,
+      symbol: symbol,
+      category: overviewData.Sector || 'Unknown',
+      price: parseFloat(quoteData.price),
+      riskScore: riskScore,
+      beta: parseFloat(overviewData.Beta || 1.0),
+      volatility: volatility,
+      pe: parseFloat(overviewData.PERatio || 20),
+      dividend: parseFloat(overviewData.DividendYield || 0) * 100
+    });
+  }
+} catch (error) {
+  console.error(`Error fetching data for ${symbol}:`, error);
+}
 }
 
-window.addEventListener('DOMContentLoaded', init);
+// Update the stock database
+stockDatabase = fetchedStocks;
+
+// Remove loading message
+const loadingMessage = document.getElementById('database-loading');
+if (loadingMessage) loadingMessage.remove();
+
+// Update the UI
+updatePopularStocksByRisk();
+console.log('Stock database populated with', stockDatabase.length, 'stocks');
+
+// If we have enough stocks, enable the find matches button
+if (stockDatabase.length > 0) {
+findMatchesBtn.disabled = false;
+} else {
+// Show error if no stocks were loaded
+const errorEl = document.createElement('div');
+errorEl.className = 'error-message';
+errorEl.innerHTML = '<p>Unable to load stock data. Please check your API key and try again.</p>';
+document.querySelector('.investment-dashboard').prepend(errorEl);
+}
+}
+
+// Helper function to fetch stock quote data
+async function fetchStockQuote(symbol) {
+try {
+const response = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`);
+const data = await response.json();
+
+if (data['Global Quote'] && data['Global Quote']['05. price']) {
+  return {
+    price: data['Global Quote']['05. price'],
+    change: data['Global Quote']['09. change'],
+    changePercent: data['Global Quote']['10. change percent']
+  };
+}
+return null;
+} catch (error) {
+console.error(`Error fetching quote for ${symbol}:`, error);
+return null;
+}
+}
+
+// Helper function to fetch stock overview data
+async function fetchStockOverview(symbol) {
+try {
+const response = await fetch(`https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${apiKey}`);
+const data = await response.json();
+
+if (data.Symbol === symbol) {
+  return data;
+}
+return null;
+} catch (error) {
+console.error(`Error fetching overview for ${symbol}:`, error);
+return null;
+}
+}
+
+// Queue more stocks to load in the background
+async function queueAdditionalStocks() {
+// Start processing remaining stocks after initial load
+const processedSymbols = stockDatabase.map(stock => stock.symbol);
+const remainingSymbols = stockSymbols.filter(symbol => !processedSymbols.includes(symbol));
+
+// Process a few at a time to avoid overwhelming the API
+for (let i = 0; i < remainingSymbols.length; i += 2) {
+const symbolsToProcess = remainingSymbols.slice(i, i + 2);
+
+for (const symbol of symbolsToProcess) {
+  try {
+    const [quoteData, overviewData] = await Promise.all([
+      fetchStockQuote(symbol),
+      fetchStockOverview(symbol)
+    ]);
+    
+    if (quoteData && overviewData) {
+      // Calculate risk score as before
+      let riskScore = 5;
+      
+      if (overviewData.Beta) {
+        const beta = parseFloat(overviewData.Beta);
+        if (beta < 0.8) riskScore = Math.floor(3 * beta + 1);
+        else if (beta > 1.2) riskScore = Math.min(10, Math.floor(5 * beta - 1));
+        else riskScore = 5;
+      }
+      
+      const volatility = overviewData.Beta ? parseFloat(overviewData.Beta) * 10 : 15;
+      
+      stockDatabase.push({
+        name: overviewData.Name || symbol,
+        symbol: symbol,
+        category: overviewData.Sector || 'Unknown',
+        price: parseFloat(quoteData.price),
+        riskScore: riskScore,
+        beta: parseFloat(overviewData.Beta || 1.0),
+        volatility: volatility,
+        pe: parseFloat(overviewData.PERatio || 20),
+        dividend: parseFloat(overviewData.DividendYield || 0) * 100
+      });
+    }
+  } catch (error) {
+    console.error(`Error fetching additional data for ${symbol}:`, error);
+  }
+}
+
+// Update the UI after each batch
+updatePopularStocksByRisk();
+
+// Wait a moment before the next batch to respect API limits
+await new Promise(resolve => setTimeout(resolve, 1500));
+}
+}
+
+// Update the event listeners section
+// Add code to the findMatchesBtn event listener to handle empty database
+findMatchesBtn.addEventListener('click', function() {
+if (stockDatabase.length === 0) {
+alert('Stock data is still loading. Please try again in a moment.');
+return;
+}
+findMatchingStocks();
+});
+
+
+// Modified findMatchingStocks function to work with dynamic data
+function findMatchingStocks() {
+const riskTolerance = parseInt(riskToleranceSlider.value);
+
+// Handle the case when the database is empty
+if (stockDatabase.length === 0) {
+alert('No stock data available. Please check your API key and internet connection.');
+return;
+}
+
+// Find stock matches for the given risk tolerance
+const matches = stockDatabase.filter(stock => {
+// Match stocks with a risk score within ±2 of the user's risk tolerance
+const riskDifference = Math.abs(stock.riskScore - riskTolerance);
+return riskDifference <= 2;
+});
+
+// If no exact matches, expand the search
+let matchesToUse = matches;
+if (matches.length === 0) {
+matchesToUse = stockDatabase;
+}
+
+// Sort matches by how close they are to the user's exact risk tolerance
+matchesToUse.sort((a, b) => {
+const aDiff = Math.abs(a.riskScore - riskTolerance);
+const bDiff = Math.abs(b.riskScore - riskTolerance);
+return aDiff - bDiff;
+});
+
+if (matchesToUse.length > 0) {
+displayRecommendation(matchesToUse[0]);
+} else {
+// Should never happen given our fallback to all stocks
+alert('No matching stocks found for your risk profile.');
+}
+}
+
+// Modified updatePopularStocksByRisk function for dynamic data
+function updatePopularStocksByRisk() {
+const riskTolerance = parseInt(riskToleranceSlider.value);
+
+// Display appropriate risk category label
+const riskLabels = document.querySelectorAll('.risk-label');
+riskLabels.forEach((label, index) => {
+if ((index === 0 && riskTolerance <= 3) || 
+    (index === 1 && riskTolerance > 3 && riskTolerance <= 7) ||
+    (index === 2 && riskTolerance > 7)) {
+  label.style.fontWeight = 'bold';
+  label.style.color = '#4285f4';
+} else {
+  label.style.fontWeight = 'normal';
+  label.style.color = '#555';
+}
+});
+
+// If no stock data loaded yet, show loading message
+if (stockDatabase.length === 0) {
+popularStocksGrid.innerHTML = '<p>No data loaded</p>';
+return;
+}
+
+// Clear previous stocks
+popularStocksGrid.innerHTML = '';
+
+// Categorize stocks by risk
+const lowRiskStocks = stockDatabase.filter(stock => stock.riskScore <= 3);
+const mediumRiskStocks = stockDatabase.filter(stock => stock.riskScore > 3 && stock.riskScore <= 7);
+const highRiskStocks = stockDatabase.filter(stock => stock.riskScore > 7);
+
+// Determine which category to show based on risk tolerance
+let stocksToShow;
+let categoryLabel;
+
+if (riskTolerance <= 3) {
+stocksToShow = lowRiskStocks.length > 0 ? lowRiskStocks : stockDatabase.slice(0, 4);
+categoryLabel = 'Conservative Picks';
+} else if (riskTolerance <= 7) {
+stocksToShow = mediumRiskStocks.length > 0 ? mediumRiskStocks : stockDatabase.slice(0, 4);
+categoryLabel = 'Balanced Opportunities';
+} else {
+stocksToShow = highRiskStocks.length > 0 ? highRiskStocks : stockDatabase.slice(0, 4);
+categoryLabel = 'High Growth Potential';
+}
+
+// Sort by closest to risk tolerance
+stocksToShow.sort((a, b) => {
+const aDiff = Math.abs(a.riskScore - riskTolerance);
+const bDiff = Math.abs(b.riskScore - riskTolerance);
+return aDiff - bDiff;
+});
+
+// Add category heading
+const heading = document.createElement('h4');
+heading.textContent = categoryLabel;
+heading.style.margin = '0 0 1rem 0';
+popularStocksGrid.appendChild(heading);
+
+// Add up to 4 stocks from the selected category
+stocksToShow.slice(0, 4).forEach(stock => {
+const stockCard = document.createElement('div');
+stockCard.className = 'stock-card-mini';
+stockCard.innerHTML = `
+  <div class="stock-symbol">${stock.symbol}</div>
+  <div class="stock-name">${stock.name}</div>
+  <div class="stock-price">$${stock.price.toFixed(2)}</div>
+  <div class="risk-reward-ratio">Beta: ${stock.beta.toFixed(2)}</div>
+  <div class="stock-category">${stock.category}</div>
+`;
+
+// Add click event to show full details
+stockCard.addEventListener('click', () => {
+  displayRecommendation(stock);
+  recommendationResult.scrollIntoView({ behavior: 'smooth' });
+});
+
+popularStocksGrid.appendChild(stockCard);
+});
+}
+
+// Add a function to check API availability
+async function checkApiAvailability() {
+try {
+const response = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=AAPL&apikey=${apiKey}`);
+const data = await response.json();
+
+// Check if we got a valid response
+if (data['Global Quote'] && data['Global Quote']['05. price']) {
+  return true;
+} else if (data['Note'] && data['Note'].includes('API call frequency')) {
+  // API limit reached
+  console.warn('API limit reached:', data['Note']);
+  return false;
+} else if (data['Error Message']) {
+  // Invalid API key or other error
+  console.error('API error:', data['Error Message']);
+  return false;
+}
+return false;
+} catch (error) {
+console.error('Error checking API availability:', error);
+return false;
+}
+}
+
+// Check API key and initialize
+async function checkApiAndInitialize() {
+// Check if API key is stored in localStorage
+const storedApiKey = localStorage.getItem('alphavantage_api_key');
+if (storedApiKey) {
+window.apiKey = storedApiKey;
+}
+
+// Check if API key is valid
+if (window.apiKey && window.apiKey !== 'YOUR_ALPHA_VANTAGE_API_KEY') {
+const isApiAvailable = await checkApiAvailability();
+if (isApiAvailable) {
+  init();
+} else {
+  setupApiKeyInput();
+  alert('There was an issue with your API key or the API service is currently unavailable.');
+}
+} else {
+setupApiKeyInput();
+}
+}
+
+function init() {
+// Show initial tab
+if (currentWalletId && getWalletById(currentWalletId)) {
+  showTab('dashboard');
+} else {
+  showTab('wallets');
+}
+
+// Initially disable the find matches button until data is loaded
+findMatchesBtn.disabled = true;
+findMatchesBtn.textContent = 'Loading Stock Data...';
+
+// Load initial stock data
+populateStockDatabase().then(() => {
+  findMatchesBtn.textContent = 'Find Matching Stocks';
+  // Start loading additional stocks in the background
+  queueAdditionalStocks();
+});
+}
+
+// Start the app
+window.addEventListener('DOMContentLoaded', checkApiAndInitialize);
+
