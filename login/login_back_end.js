@@ -409,6 +409,16 @@ app.get("/transactions", authenticateToken, async (req, res) => {
           // Add any other fields your frontend expects
         }));
         
+        const uri = "mongodb+srv://amirkhabaza:Syria993@arhackaton.mmr1m.mongodb.net/?retryWrites=true&w=majority&appName=ARHackaton";
+
+        const client = new MongoClient(uri, {
+        serverApi: {
+          version: ServerApiVersion.v1,
+          strict: true,
+        deprecationErrors: true,
+          },
+      });
+        
         allTransactions.push(...transformedTransactions);
       } catch (error) {
         console.error(`Error getting transactions for account ${account.id}:`, error.response?.data || error.message);
