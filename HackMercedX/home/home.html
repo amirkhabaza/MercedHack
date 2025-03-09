@@ -26,6 +26,39 @@
     <!-- Dashboard Page -->
     <div class="page" id="dashboard-page">
       <div class="dashboard-container">
+        <!--Spending for a Certain Month-->
+        <div class="dashboard-section" id="spending-section">
+          <h2>Monthly Spending</h2>
+          <p>Track how much you've spent this month.</p>
+          <canvas id="spendingChart"></canvas>
+        </div>
+
+        <!--Finincial Goals/Habits section-->
+        <div class="dashboard-section" id="finincial-goals-section">
+          <h2>Financial Goals</h2>
+          <p>Set and track your financial goals.</p>
+          <div class="goals-list">
+            <!--Set up Financial Goals-->
+          </div>
+        </div>
+
+        <!--Upcoming Bills-->
+        <div class="dashboard-section" id="upcoming-bills-section">
+          <h2>Upcoming Bills</h2>
+          <p>Stay on top of your bills.</p>
+          <div class="upcoming-bills-list">
+            <!--Set up Upcoming Bills Dynamically-->
+          </div>
+        </div>
+
+        <!--Cashflow for a certain month-->
+        <div class="dashboard-section" id="cashflow-section">
+          <h2>Monthly Clashflow</h2>
+          <p>Monitor your monthly cashflow.</p>
+          <div class="cashflow-details">
+            <!--Cashflow Details will be added Dynamically-->
+          </div>
+        </div> 
         <!-- Activity Section -->
         <div class="dashboard-section" id="activity-section">
           <h2>Activity</h2>
@@ -174,6 +207,7 @@
       </div>  
     </div>
     
+    
     <!-- Wallets Page -->
     <div class="page hidden" id="wallets-page">
       <div id="wallets-list">
@@ -199,5 +233,6 @@
   </div>
 
   <script src="home.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
 </html>
